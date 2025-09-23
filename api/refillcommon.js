@@ -1,5 +1,5 @@
 // api/refillpool.js
-import { createWalletClient, http } from 'viem';
+import { createWalletClient, createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrum } from 'viem/chains';
 import { abi } from '../abi.js'; // RefillPoolCommon contract ABI
@@ -16,14 +16,11 @@ export default async function handler(req, res) {
   }
   // --- END CORS HEADERS ---
 
-  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Only POST requests allowed' });
   }
 
   try {
-    // No parameters needed for refillPoolCommon function
-    // Optional: could accept wallet address for additional validation
     const { walletAddress } = req.body;
 
     // Load keys from env
@@ -39,15 +36,22 @@ export default async function handler(req, res) {
 
     const account = privateKeyToAccount(PRIVATE_KEY);
 
-    const client = createWalletClient({
+    // ✅ Use PublicClient for reading
+    const publicClient = createPublicClient({
+      chain: arbitrum,
+      transport: http(`https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`)
+    });
+
+    // ✅ Use WalletClient for writing
+    const walletClient = createWalletClient({
       account,
       chain: arbitrum,
       transport: http(`https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    // First, check if contract has any NFTs to transfer
-    const nftCount = await client.readContract({
-      address: '0xb009B318aBA823B18002283b1A1dc0552DF6612b', // RefillPoolCommon contract
+    // --- READ CONTRACT STATE ---
+    const nftCount = await publicClient.readContract({
+      address: '0xb009B318aBA823B18002283b1A1dc0552DF6612b',
       abi,
       functionName: 'getHeldTokenCount'
     });
@@ -59,8 +63,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Get list of held token IDs for logging
-    const heldTokenIds = await client.readContract({
+    const heldTokenIds = await publicClient.readContract({
       address: '0xb009B318aBA823B18002283b1A1dc0552DF6612b',
       abi,
       functionName: 'getHeldTokenIds'
@@ -68,29 +71,25 @@ export default async function handler(req, res) {
 
     console.log(`Contract holds ${nftCount} NFTs:`, heldTokenIds);
 
-    // Call refillPoolCommon function
-    const txHash = await client.writeContract({
-      address: '0xb009B318aBA823B18002283b1A1dc0552DF6612b', // RefillPoolCommon contract
+    // --- WRITE TO CONTRACT ---
+    const txHash = await walletClient.writeContract({
+      address: '0xb009B318aBA823B18002283b1A1dc0552DF6612b',
       abi,
       functionName: 'refillPoolCommon',
-      args: [] // No arguments needed
+      args: []
     });
 
-    // Get transaction receipt to parse events
-    const receipt = await client.waitForTransactionReceipt({
-      hash: txHash
-    });
+    const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Try to find PoolRefilled event in logs
+    // --- PARSE EVENTS ---
     let transferredTokenId = null;
     if (receipt.logs) {
-      const poolRefilledEvent = receipt.logs.find(log => 
-        log.topics[0] === client.keccak256('PoolRefilled(uint256,address)')
+      const poolRefilledEvent = receipt.logs.find(
+        log => log.topics[0] === publicClient.keccak256('PoolRefilled(uint256,address)')
       );
       
       if (poolRefilledEvent) {
-        // Decode the event data to get token ID
-        const decoded = client.decodeEventLog({
+        const decoded = publicClient.decodeEventLog({
           abi,
           eventName: 'PoolRefilled',
           data: poolRefilledEvent.data,
@@ -111,8 +110,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('RefillPool API Error:', err);
-    
-    // Handle specific contract errors
+
     if (err.message.includes('No NFTs to transfer')) {
       return res.status(400).json({ 
         error: 'Contract has no NFTs available to transfer',
