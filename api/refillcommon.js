@@ -1,7 +1,7 @@
 // api/refillpool.js
 import { createWalletClient, createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrum } from 'viem/chains';
+import { arbitrumSepolia } from 'viem/chains';
 import { abi } from '../abi.js'; // RefillPoolCommon contract ABI
 
 export default async function handler(req, res) {
@@ -38,15 +38,15 @@ export default async function handler(req, res) {
 
     // ✅ Use PublicClient for reading
     const publicClient = createPublicClient({
-      chain: arbitrum,
-      transport: http(`https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`)
+      chain: arbitrumSepolia,
+      transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
     // ✅ Use WalletClient for writing
     const walletClient = createWalletClient({
       account,
-      chain: arbitrum,
-      transport: http(`https://arb-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`)
+      chain: arbitrumSepolia,
+      transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
     // --- READ CONTRACT STATE ---
