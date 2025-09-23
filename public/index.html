@@ -1,34 +1,127 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Mint NFT</title>
+  <title>Refill Pool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    button {
+      background: #007cba;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px 0;
+    }
+    button:hover {
+      background: #005a87;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 6px;
+      min-height: 20px;
+    }
+    .success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .info {
+      background: #e7f3ff;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
-  <h1>Free NFT Mint</h1>
-  <input type="text" id="wallet" placeholder="Enter wallet address" style="width:300px;">
-  <button id="mintBtn">Mint Now</button>
+  <div class="container">
+    <h1>NFT Pool Refill</h1>
+    
+    <div class="info">
+      <strong>What this does:</strong><br>
+      Randomly selects an NFT from the contract and sends it to the pool.<br>
+      <small>Contract: 0xb009B318aBA823B18002283b1A1dc0552DF6612b</small>
+    </div>
 
-  <p id="result"></p>
+    <button id="refillBtn">Refill Pool Now</button>
+    <p id="result"></p>
+  </div>
 
   <script>
-    document.getElementById('mintBtn').addEventListener('click', async () => {
-      const address = document.getElementById('wallet').value.trim();
-      if (!address) {
-        alert('Enter a wallet address!');
-        return;
+    document.getElementById('refillBtn').addEventListener('click', async () => {
+      const button = document.getElementById('refillBtn');
+      const resultDiv = document.getElementById('result');
+      
+      // Update button state
+      button.disabled = true;
+      button.textContent = 'Refilling...';
+      resultDiv.textContent = 'Calling API...';
+      resultDiv.className = '';
+      
+      try {
+        const res = await fetch('https://packrippr-backend.vercel.app/api/refillcommon', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}) // No parameters needed
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+          resultDiv.innerHTML = `
+            <div class="success">
+              ✅ Pool Refilled Successfully!<br>
+              <strong>TX Hash:</strong> <code>${data.txHash}</code><br>
+              ${data.transferredTokenId ? `<strong>Token ID:</strong> ${data.transferredTokenId}<br>` : ''}
+              ${data.previousNftCount ? `<strong>NFTs Available:</strong> ${data.previousNftCount}<br>` : ''}
+              <small>${data.message || 'NFT transferred to pool'}</small>
+            </div>
+          `;
+        } else {
+          resultDiv.innerHTML = `
+            <div class="error">
+              ❌ Error: ${data.error}<br>
+              ${data.details ? `<small>${data.details}</small>` : ''}
+            </div>
+          `;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `
+          <div class="error">
+            ❌ Network Error: ${error.message}<br>
+            <small>Make sure the API is running.</small>
+          </div>
+        `;
+      } finally {
+        // Reset button
+        button.disabled = false;
+        button.textContent = 'Refill Pool Now';
       }
-
-      const res = await fetch('/api/mint', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address })
-      });
-
-      const data = await res.json();
-      document.getElementById('result').innerText =
-        data.success
-          ? `✅ Minted! TX Hash: ${data.txHash}`
-          : `❌ Error: ${data.error}`;
     });
   </script>
 </body>
