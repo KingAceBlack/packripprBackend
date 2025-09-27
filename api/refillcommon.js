@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0xb009B318aBA823B18002283b1A1dc0552DF6612b';
+    const CONTRACT_ADDRESS = '0x4bA2ecDa27597B493DC556C7A8110FF18a1c7367';
 
     // READS
     const nftCount = await publicClient.readContract({
