@@ -22,8 +22,7 @@ export default async function handler(req, res) {
     if (!PRIVATE_KEY) return res.status(500).json({ error: 'Private key not configured' });
     if (!ALCHEMY_KEY) return res.status(500).json({ error: 'Alchemy key not configured' });
 
-    const account = privateKeyToAccount(PRIVATE_KEY);
-
+    const account = privateKeyToAccount(`0x${PRIVATE_KEY}`);
     // PUBLIC client for reads & waiting for receipts (Arbitrum Sepolia / testnet)
     const publicClient = createPublicClient({
       chain: arbitrumSepolia,
