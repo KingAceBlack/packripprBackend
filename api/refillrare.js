@@ -65,7 +65,9 @@ export default async function handler(req, res) {
       address: CONTRACT_ADDRESS,
       abi,
       functionName: 'refillPoolRare',
-      args: []
+      args: [],
+      gas: 300000n, // Add explicit gas limit
+      gasPrice: await publicClient.getGasPrice() // Or use dynamic gas price
     });
 
     // Wait for the tx to be mined and get the receipt
