@@ -146,6 +146,13 @@ export const abi = [
   },
   {
     "inputs": [],
+    "name": "refillPoolEpic",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "renounceOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
