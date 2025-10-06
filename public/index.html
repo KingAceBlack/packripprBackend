@@ -84,11 +84,13 @@
       resultDiv.className = '';
       
       try {
-        const res = await fetch('https://packrippr-backend.vercel.app/api/refilllegend', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}) // No parameters needed
-        });
+  const res = await fetch('https://packrippr-backend.vercel.app/api/pauseops', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      secretKey: '011from235softistheg'  // Add your secret key here
+    })
+  });
         
         const data = await res.json();
         
