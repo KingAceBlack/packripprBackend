@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0x39039d4bE8B356F9aF01B82Db1793F33FD01B95C';
+    const CONTRACT_ADDRESS = '0xe92b0D7056c0f958164f4bBC010fBD68EFd7005A';
 
     // READS
     const nftCount = await publicClient.readContract({
@@ -98,7 +98,7 @@ export default async function handler(req, res) {
       txHash,
       transferredTokenId,
       previousNftCount: nftCount.toString(),
-      poolContract: '0x1c8fD4B77dE82e7eC995D49457e10828c39C57c0',
+      poolContract: '0xf54Ab79B561A9E579e1Fd2db39529FD4F36686Dc',
       message: 'NFT successfully transferred to pool'
     });
 
