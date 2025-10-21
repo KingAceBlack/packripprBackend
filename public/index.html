@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Purchase Signature Test</title>
+  <title>Purchase NFT</title>
+  <script src="https://cdn.jsdelivr.net/npm/viem@2.7.15/dist/viem.global.js"></script>
   <style>
     body {
       background-color: #111;
@@ -13,75 +14,316 @@
       align-items: center;
       padding: 40px;
     }
+    .container {
+      max-width: 700px;
+      width: 100%;
+    }
     input, button {
       margin: 6px;
-      padding: 8px;
+      padding: 12px;
       border-radius: 5px;
       border: none;
-    }
-    input {
-      width: 320px;
+      width: 100%;
+      box-sizing: border-box;
     }
     button {
       background: #444;
       color: white;
       cursor: pointer;
+      font-weight: bold;
+      font-size: 16px;
     }
     button:hover {
       background: #666;
     }
+    button:disabled {
+      background: #333;
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
     pre {
       background: #222;
-      padding: 10px;
+      padding: 15px;
       border-radius: 8px;
-      width: 90%;
-      max-width: 600px;
       white-space: pre-wrap;
       word-break: break-all;
+      font-size: 12px;
+    }
+    .step {
+      background: #1a1a1a;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 8px;
+      border-left: 4px solid #444;
+    }
+    .step.active {
+      border-left-color: #0f0;
+    }
+    .step.success {
+      border-left-color: #0f0;
+      background: #0a2a0a;
+    }
+    .step.error {
+      border-left-color: #f00;
+      background: #2a0a0a;
+    }
+    .wallet-info {
+      background: #1a1a1a;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+      font-size: 12px;
     }
   </style>
 </head>
 <body>
-  <h2>🪶 Purchase Signature Generator</h2>
+  <div class="container">
+    <h2>🎴 Purchase Random NFT</h2>
 
-  <input type="text" id="userAddress" placeholder="Enter wallet address (0x...)" />
-  <input type="number" id="nonce" placeholder="Enter nonce (e.g. 1)" />
-  <button onclick="generateSignature()">Generate Signature</button>
+    <button id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
+    
+    <div id="walletInfo" class="wallet-info" style="display: none;">
+      <div>Connected: <span id="connectedAddress"></span></div>
+      <div>Balance: <span id="balance"></span> ETH</div>
+    </div>
 
-  <h3>Response:</h3>
-  <pre id="output">Waiting...</pre>
+    <input type="text" id="contractAddress" placeholder="Contract Address (0x...)" value="0xd1bc1624d1aA3bD235Ea57EfBFf7505192bF649D" />
+    
+    <button id="purchaseBtn" onclick="purchaseNFT()" disabled>Purchase Random NFT (0.001 ETH)</button>
+
+    <h3>Process Status:</h3>
+    <div id="step1" class="step">
+      <strong>Step 1:</strong> Get signature from API
+      <pre id="step1Output">Waiting...</pre>
+    </div>
+    
+    <div id="step2" class="step">
+      <strong>Step 2:</strong> Call contract purchaseRandomNFT()
+      <pre id="step2Output">Waiting...</pre>
+    </div>
+    
+    <div id="step3" class="step">
+      <strong>Step 3:</strong> Transaction result
+      <pre id="step3Output">Waiting...</pre>
+    </div>
+  </div>
 
   <script>
-    async function generateSignature() {
-      const userAddress = document.getElementById('userAddress').value.trim();
-      const nonce = document.getElementById('nonce').value.trim();
-      const output = document.getElementById('output');
+    const { createWalletClient, createPublicClient, custom, http, parseEther } = window.viem;
+    
+    let walletClient;
+    let publicClient;
+    let userAddress;
 
-      if (!userAddress || !nonce) {
-        output.textContent = "⚠️ Please enter both wallet address and nonce.";
-        return;
+    // Contract ABI - only the functions we need
+    const CONTRACT_ABI = [
+      {
+        "inputs": [
+          { "internalType": "uint256", "name": "nonce", "type": "uint256" },
+          { "internalType": "bytes", "name": "signature", "type": "bytes" }
+        ],
+        "name": "purchaseRandomNFT",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "payable",
+        "type": "function"
+      },
+      {
+        "inputs": [],
+        "name": "viewNFTBalance",
+        "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+        "stateMutability": "view",
+        "type": "function"
       }
+    ];
 
-      output.textContent = "⏳ Sending request...";
+    async function connectWallet() {
+      const connectBtn = document.getElementById('connectBtn');
+      const walletInfo = document.getElementById('walletInfo');
+      const purchaseBtn = document.getElementById('purchaseBtn');
 
       try {
-        const response = await fetch('/api/purchaseSignature', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userAddress, nonce })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          output.textContent = `❌ Error: ${data.error || 'Unknown error'}`;
+        if (!window.ethereum) {
+          alert('Please install MetaMask to use this dApp');
           return;
         }
 
-        output.textContent = JSON.stringify(data, null, 2);
+        // Request account access
+        const accounts = await window.ethereum.request({ 
+          method: 'eth_requestAccounts' 
+        });
+        
+        userAddress = accounts[0];
+
+        // Create clients
+        walletClient = createWalletClient({
+          account: userAddress,
+          chain: {
+            id: 421614, // Arbitrum Sepolia
+            name: 'Arbitrum Sepolia',
+            network: 'arbitrum-sepolia',
+            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+            rpcUrls: {
+              default: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] },
+              public: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] }
+            }
+          },
+          transport: custom(window.ethereum)
+        });
+
+        publicClient = createPublicClient({
+          chain: {
+            id: 421614,
+            name: 'Arbitrum Sepolia',
+            network: 'arbitrum-sepolia',
+            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+            rpcUrls: {
+              default: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] },
+              public: { http: ['https://sepolia-rollup.arbitrum.io/rpc'] }
+            }
+          },
+          transport: http('https://sepolia-rollup.arbitrum.io/rpc')
+        });
+
+        // Get balance
+        const balance = await publicClient.getBalance({ address: userAddress });
+        const ethBalance = (Number(balance) / 1e18).toFixed(4);
+
+        // Update UI
+        document.getElementById('connectedAddress').textContent = 
+          userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
+        document.getElementById('balance').textContent = ethBalance;
+        
+        walletInfo.style.display = 'block';
+        connectBtn.textContent = 'Wallet Connected ✓';
+        connectBtn.disabled = true;
+        purchaseBtn.disabled = false;
+
       } catch (err) {
-        output.textContent = `🚨 Request failed: ${err.message}`;
+        console.error('Connection error:', err);
+        alert('Failed to connect wallet: ' + err.message);
       }
+    }
+
+    async function purchaseNFT() {
+      const contractAddress = document.getElementById('contractAddress').value.trim();
+      const purchaseBtn = document.getElementById('purchaseBtn');
+      
+      const step1 = document.getElementById('step1');
+      const step1Output = document.getElementById('step1Output');
+      const step2 = document.getElementById('step2');
+      const step2Output = document.getElementById('step2Output');
+      const step3 = document.getElementById('step3');
+      const step3Output = document.getElementById('step3Output');
+
+      if (!contractAddress) {
+        alert('Please enter contract address');
+        return;
+      }
+
+      if (!walletClient || !userAddress) {
+        alert('Please connect wallet first');
+        return;
+      }
+
+      purchaseBtn.disabled = true;
+      purchaseBtn.textContent = 'Processing...';
+
+      try {
+        // Reset steps
+        step1.className = 'step';
+        step2.className = 'step';
+        step3.className = 'step';
+        step1Output.textContent = 'Requesting signature...';
+        step2Output.textContent = 'Waiting...';
+        step3Output.textContent = 'Waiting...';
+
+        // STEP 1: Get signature from API
+        step1.className = 'step active';
+        const nonce = Date.now() + Math.floor(Math.random() * 1000000);
+        
+        step1Output.textContent = `Calling API with:\n- User: ${userAddress}\n- Nonce: ${nonce}`;
+
+        const apiResponse = await fetch('/api/purchaseSignature', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            userAddress,
+            nonce: nonce.toString()
+          })
+        });
+
+        const apiData = await apiResponse.json();
+
+        if (!apiResponse.ok) {
+          throw new Error(apiData.error || 'Failed to get signature');
+        }
+
+        step1.className = 'step success';
+        step1Output.textContent = `✓ Signature received:\n${JSON.stringify(apiData, null, 2)}`;
+
+        // STEP 2: Call contract with signature
+        step2.className = 'step active';
+        step2Output.textContent = 'Sending transaction to contract...';
+
+        const txHash = await walletClient.writeContract({
+          address: contractAddress,
+          abi: CONTRACT_ABI,
+          functionName: 'purchaseRandomNFT',
+          args: [BigInt(nonce), apiData.signature],
+          value: parseEther('0.001')
+        });
+
+        step2.className = 'step success';
+        step2Output.textContent = `✓ Transaction sent!\nHash: ${txHash}`;
+
+        // STEP 3: Wait for confirmation
+        step3.className = 'step active';
+        step3Output.textContent = 'Waiting for confirmation...';
+
+        const receipt = await publicClient.waitForTransactionReceipt({ 
+          hash: txHash 
+        });
+
+        step3.className = 'step success';
+        step3Output.textContent = `✓ Transaction confirmed!\n${JSON.stringify({
+          status: receipt.status,
+          blockNumber: receipt.blockNumber.toString(),
+          gasUsed: receipt.gasUsed.toString(),
+          transactionHash: receipt.transactionHash
+        }, null, 2)}`;
+
+        alert('🎉 NFT purchased successfully!');
+
+      } catch (err) {
+        console.error('Purchase error:', err);
+        
+        if (step1.className === 'step active') {
+          step1.className = 'step error';
+          step1Output.textContent = `✗ Error: ${err.message}`;
+        } else if (step2.className === 'step active') {
+          step2.className = 'step error';
+          step2Output.textContent = `✗ Error: ${err.message}`;
+        } else if (step3.className === 'step active') {
+          step3.className = 'step error';
+          step3Output.textContent = `✗ Error: ${err.message}`;
+        }
+
+        alert('Purchase failed: ' + err.message);
+      } finally {
+        purchaseBtn.disabled = false;
+        purchaseBtn.textContent = 'Purchase Random NFT (0.001 ETH)';
+      }
+    }
+
+    // Handle account changes
+    if (window.ethereum) {
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length === 0) {
+          location.reload();
+        } else {
+          location.reload();
+        }
+      });
     }
   </script>
 </body>
