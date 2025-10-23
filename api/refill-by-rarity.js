@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     if (!rarity) {
       return res.status(400).json({
         error: 'Rarity parameter is required',
-        details: 'Specify rarity: common, rare, epic, or legend'
+        details: 'Specify rarity: common, rare, epic, or legendary'
       });
     }
 
@@ -53,7 +53,7 @@ export default async function handler(req, res) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contractAddress: '0x5Bc8904CE5cC7db7ac731DE368a829EAC4A803f7', // NFT contract
+              contractAddress: '0x5Bc8904CE5cC7db7ac731DE368a829EAC4A803f7',
               tokenId: tokenId.toString(),
               tokenType: 'ERC721'
             })
@@ -72,18 +72,17 @@ export default async function handler(req, res) {
       }
     }
 
-    // Filter by rarity
+    // Filter by rarity - FIXED TO MATCH YOUR METADATA
     const filteredNFTs = nftData.filter(nft => {
       const metadata = nft.metadata;
       if (!metadata) return false;
 
-      // Check for rarity in different possible locations
       let foundRarity = null;
 
-      // Check attributes array
+      // Check attributes array for rarity
       if (metadata.attributes && Array.isArray(metadata.attributes)) {
         const rarityAttr = metadata.attributes.find(attr => 
-          attr.trait_type && attr.trait_type.toLowerCase().includes('rarity')
+          attr.trait_type && attr.trait_type.toLowerCase() === 'rarity'
         );
         if (rarityAttr) foundRarity = rarityAttr.value;
       }
@@ -93,19 +92,33 @@ export default async function handler(req, res) {
         foundRarity = metadata.rarity;
       }
 
-      // Check name for rarity indicators
-      if (!foundRarity && metadata.name) {
-        const name = metadata.name.toLowerCase();
-        if (name.includes('common')) foundRarity = 'common';
-        else if (name.includes('rare')) foundRarity = 'rare';
-        else if (name.includes('epic')) foundRarity = 'epic';
-        else if (name.includes('legendary')) foundRarity = 'legendary';
-      }
+      // Map search terms to actual metadata values
+      const rarityMapping = {
+        'common': 'common',
+        'rare': 'rare', 
+        'epic': 'epic',
+        'legend': 'legendary'  // You're searching for "legend" but metadata has "legendary"
+      };
 
-      return foundRarity && foundRarity.toLowerCase() === rarity.toLowerCase();
+      const searchRarity = rarityMapping[rarity.toLowerCase()] || rarity.toLowerCase();
+      
+      return foundRarity && foundRarity.toLowerCase() === searchRarity;
     });
 
     console.log(`Found ${filteredNFTs.length} NFTs with rarity: ${rarity}`);
+
+    // Debug: Log all rarities found for troubleshooting
+    console.log("All rarities found in metadata:");
+    nftData.forEach(nft => {
+      if (nft.metadata && nft.metadata.attributes) {
+        const rarityAttr = nft.metadata.attributes.find(attr => 
+          attr.trait_type && attr.trait_type.toLowerCase() === 'rarity'
+        );
+        if (rarityAttr) {
+          console.log(`Token ${nft.tokenId}: ${rarityAttr.value}`);
+        }
+      }
+    });
 
     res.status(200).json({
       success: true,
