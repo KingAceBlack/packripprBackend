@@ -151,11 +151,17 @@ export const abi = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "refillPoolCommon",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
+    "inputs": [
+		{
+			"internalType": "uint256",
+			"name": "tokenId",
+			"type": "uint256"
+		}
+	],
+	"name": "refillPoolCommon",
+	"outputs": [],
+	"stateMutability": "nonpayable",
+	"type": "function"
   },
   {
     "inputs": [],
