@@ -99,7 +99,7 @@ export default async function handler(req, res) {
         if (name.includes('common')) foundRarity = 'common';
         else if (name.includes('rare')) foundRarity = 'rare';
         else if (name.includes('epic')) foundRarity = 'epic';
-        else if (name.includes('legend')) foundRarity = 'legend';
+        else if (name.includes('legendary')) foundRarity = 'legendary';
       }
 
       return foundRarity && foundRarity.toLowerCase() === rarity.toLowerCase();
