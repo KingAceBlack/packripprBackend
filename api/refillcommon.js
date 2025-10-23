@@ -1,8 +1,8 @@
 // api/refillpool.js
 import { createWalletClient, createPublicClient, http, parseEventLogs } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arbitrumSepolia } from 'viem/chains'; // use arb-sepolia (testnet)
-import { abi } from '../abi.js'; // your contract ABI
+import { arbitrumSepolia } from 'viem/chains';
+import { abi } from '../abi.js'; // your updated contract ABI
 
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST requests allowed' });
 
   try {
-    const { walletAddress } = req.body;
+    const { tokenId } = req.body; // Frontend MUST specify which tokenId to use
 
     const PRIVATE_KEY = process.env.PRIVATE_KEY;
     const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
@@ -22,58 +22,68 @@ export default async function handler(req, res) {
     if (!PRIVATE_KEY) return res.status(500).json({ error: 'Private key not configured' });
     if (!ALCHEMY_KEY) return res.status(500).json({ error: 'Alchemy key not configured' });
 
+    // Validate tokenId is provided by frontend
+    if (!tokenId && tokenId !== 0) {
+      return res.status(400).json({
+        error: 'tokenId is required',
+        details: 'You must specify which NFT tokenId to use for refilling the pool'
+      });
+    }
+
     const account = privateKeyToAccount(`0x${PRIVATE_KEY}`);
-    // PUBLIC client for reads & waiting for receipts (Arbitrum Sepolia / testnet)
     const publicClient = createPublicClient({
       chain: arbitrumSepolia,
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    // WALLET client for writes
     const walletClient = createWalletClient({
       account,
       chain: arbitrumSepolia,
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0xE6E7BCf512b752151E1c7a31d9f25b27Ad58be2A';
+    const CONTRACT_ADDRESS = '0x851c4152161904F7ad05cf49d64dd1F39fd8E35d';
 
-    // READS
-    const nftCount = await publicClient.readContract({
+    // Verify the contract actually holds the specified token
+    const holdsToken = await publicClient.readContract({
       address: CONTRACT_ADDRESS,
       abi,
-      functionName: 'getHeldTokenCount'
+      functionName: 'holdsToken',
+      args: [BigInt(tokenId)]
     });
 
-    if (nftCount === 0n) {
+    if (!holdsToken) {
+      // Get current held tokens to show available options
+      const heldTokenIds = await publicClient.readContract({
+        address: CONTRACT_ADDRESS,
+        abi,
+        functionName: 'getHeldTokenIds'
+      });
+
       return res.status(400).json({
-        error: 'No NFTs available in contract to transfer',
-        nftCount: 0
+        error: 'Contract does not hold the specified token',
+        tokenId,
+        availableTokens: heldTokenIds.map(id => id.toString()),
+        details: `Token ID ${tokenId} is not owned by the contract. Available tokens: ${heldTokenIds.join(', ')}`
       });
     }
 
-    const heldTokenIds = await publicClient.readContract({
-      address: CONTRACT_ADDRESS,
-      abi,
-      functionName: 'getHeldTokenIds'
-    });
+    console.log(`Refilling pool with token ${tokenId}...`);
 
-    console.log(`Contract holds ${nftCount} NFTs:`, heldTokenIds);
-
-    // WRITE (send tx)
+    // Execute refill with the frontend-specified tokenId
     const txHash = await walletClient.writeContract({
       address: CONTRACT_ADDRESS,
       abi,
       functionName: 'refillPoolCommon',
-      args: [],
-      gas: 300000n, // Add explicit gas limit
-      gasPrice: await publicClient.getGasPrice() // Or use dynamic gas price
+      args: [BigInt(tokenId)], // Use the tokenId from frontend
+      gas: 300000n,
+      gasPrice: await publicClient.getGasPrice()
     });
 
-    // Wait for the tx to be mined and get the receipt
+    // Wait for transaction receipt
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    // Decode PoolRefilled event(s) from receipt.logs using parseEventLogs
+    // Parse event logs
     let transferredTokenId = null;
     if (receipt?.logs?.length) {
       const parsed = parseEventLogs({
@@ -83,7 +93,6 @@ export default async function handler(req, res) {
       });
 
       if (parsed && parsed.length > 0) {
-        // parsed[0].args should contain tokenId and poolContract
         const maybeTokenId = parsed[0].args?.tokenId ?? parsed[0].args?.[0];
         if (typeof maybeTokenId === 'bigint') {
           transferredTokenId = maybeTokenId.toString();
@@ -96,31 +105,31 @@ export default async function handler(req, res) {
     res.status(200).json({
       success: true,
       txHash,
-      transferredTokenId,
-      previousNftCount: nftCount.toString(),
-      poolContract: '0xf54Ab79B561A9E579e1Fd2db39529FD4F36686Dc',
-      message: 'NFT successfully transferred to pool'
+      tokenIdUsed: tokenId,
+      transferredTokenId: transferredTokenId || tokenId,
+      message: `Successfully used NFT #${tokenId} to refill pool`
     });
 
   } catch (err) {
     console.error('RefillPool API Error:', err);
 
-    if (err?.message?.includes('No NFTs to transfer')) {
+    // Handle specific contract errors
+    if (err?.message?.includes('Contract does not hold token')) {
       return res.status(400).json({
-        error: 'Contract has no NFTs available to transfer',
+        error: 'Contract does not hold the specified token',
         details: err.message
       });
     }
 
-    if (err?.message?.includes("Contract doesn't own this NFT anymore")) {
+    if (err?.message?.includes('Invalid tokenId') || err?.message?.includes('invalid token')) {
       return res.status(400).json({
-        error: 'Contract no longer owns the selected NFT',
+        error: 'Invalid tokenId provided',
         details: err.message
       });
     }
 
     res.status(500).json({
-      error: 'Failed to execute refillPoolCommon',
+      error: 'Failed to refill pool',
       details: err?.message ?? String(err)
     });
   }
