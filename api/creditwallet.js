@@ -2,19 +2,27 @@
 import { createWalletClient, createPublicClient, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
-import { abi } from '../abi.js'; // your updated contract ABI
+import { abi } from '../abi.js';
 
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Secret-Key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST requests allowed' });
 
   try {
-    const { recipient, amount } = req.body; // Frontend MUST specify recipient address and amount in ETH
+    // Check secret key first - EXACTLY like pauseops
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const providedKey = req.headers['x-secret-key'] || req.body.secretKey;
+
+    if (!SECRET_KEY) return res.status(500).json({ error: 'Server configuration error' });
+    if (!providedKey) return res.status(401).json({ error: 'Secret key required' });
+    if (providedKey !== SECRET_KEY) return res.status(403).json({ error: 'Invalid secret key' });
+
+    const { recipient, amount } = req.body;
 
     const PRIVATE_KEY = process.env.PRIVATE_KEY;
     const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
