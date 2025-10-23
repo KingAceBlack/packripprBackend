@@ -10,6 +10,19 @@ export const abi = [
     "name": "OwnableInvalidOwner",
     "type": "error"
   },
+{
+		"inputs": [],
+		"name": "getContractBalance",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
   {
     "inputs": [
       {
