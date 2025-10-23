@@ -1,20 +1,28 @@
-// api/refillpool.js
+// api/refillcommon.js
 import { createWalletClient, createPublicClient, http, parseEventLogs } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrumSepolia } from 'viem/chains';
-import { abi } from '../abi.js'; // your updated contract ABI
+import { abi } from '../abi.js';
 
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Secret-Key');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST requests allowed' });
 
   try {
-    const { tokenId } = req.body; // Frontend MUST specify which tokenId to use
+    // Check secret key first - EXACTLY like pauseops
+    const SECRET_KEY = process.env.SECRET_KEY;
+    const providedKey = req.headers['x-secret-key'] || req.body.secretKey;
+
+    if (!SECRET_KEY) return res.status(500).json({ error: 'Server configuration error' });
+    if (!providedKey) return res.status(401).json({ error: 'Secret key required' });
+    if (providedKey !== SECRET_KEY) return res.status(403).json({ error: 'Invalid secret key' });
+
+    const { tokenId } = req.body;
 
     const PRIVATE_KEY = process.env.PRIVATE_KEY;
     const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
@@ -22,7 +30,7 @@ export default async function handler(req, res) {
     if (!PRIVATE_KEY) return res.status(500).json({ error: 'Private key not configured' });
     if (!ALCHEMY_KEY) return res.status(500).json({ error: 'Alchemy key not configured' });
 
-    // Validate tokenId is provided by frontend
+    // Validate tokenId is provided
     if (!tokenId && tokenId !== 0) {
       return res.status(400).json({
         error: 'tokenId is required',
@@ -75,7 +83,7 @@ export default async function handler(req, res) {
       address: CONTRACT_ADDRESS,
       abi,
       functionName: 'refillPoolCommon',
-      args: [BigInt(tokenId)], // Use the tokenId from frontend
+      args: [BigInt(tokenId)],
       gas: 300000n,
       gasPrice: await publicClient.getGasPrice()
     });
@@ -124,6 +132,13 @@ export default async function handler(req, res) {
     if (err?.message?.includes('Invalid tokenId') || err?.message?.includes('invalid token')) {
       return res.status(400).json({
         error: 'Invalid tokenId provided',
+        details: err.message
+      });
+    }
+
+    if (err?.message?.includes('Only owner can call this function')) {
+      return res.status(403).json({
+        error: 'Unauthorized: Only contract owner can refill pool',
         details: err.message
       });
     }
