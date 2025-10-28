@@ -66,7 +66,7 @@ export default async function handler(req, res) {
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0x313058DaA6F50442cbC82e18Eb774824B4329a09';
+    const CONTRACT_ADDRESS = '0x345696D68D5D3e2bbF5307152aA6458286056F0f';
 
     // Convert ETH amount to wei
     const amountInWei = parseEther(amount.toString());
