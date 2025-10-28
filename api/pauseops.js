@@ -41,7 +41,7 @@ export default async function handler(req, res) {
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0xd1bc1624d1aA3bD235Ea57EfBFf7505192bF649D';
+    const CONTRACT_ADDRESS = '0x345696D68D5D3e2bbF5307152aA6458286056F0f';
 
     const isPaused = await publicClient.readContract({
       address: CONTRACT_ADDRESS,
