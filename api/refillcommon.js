@@ -50,7 +50,7 @@ export default async function handler(req, res) {
       transport: http(`https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`)
     });
 
-    const CONTRACT_ADDRESS = '0x851c4152161904F7ad05cf49d64dd1F39fd8E35d';
+    const CONTRACT_ADDRESS = '0xA3D7FB8BA2cD9605D0599BD23F1486725A5f7a68';
 
     // Verify the contract actually holds the specified token
     const holdsToken = await publicClient.readContract({
