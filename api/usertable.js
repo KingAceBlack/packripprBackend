@@ -50,7 +50,7 @@ export default async function handler(req, res) {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Prefer': 'resolution=merge-duplicates'
+          'Prefer': 'resolution=merge-duplicates,return=representation'  // ← KEY FIX: Request data back
         },
         body: JSON.stringify({
           wallet_address: walletAddress,
@@ -76,13 +76,25 @@ export default async function handler(req, res) {
         throw new Error(`Supabase error: ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log('Supabase success response:', data);
+      // ← KEY FIX: Handle empty responses
+      const responseText = await response.text();
+      console.log('Supabase raw response:', responseText);
+      
+      let data = [];
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch (parseError) {
+          console.log('Could not parse response as JSON:', parseError);
+        }
+      }
+
+      console.log('Supabase parsed data:', data);
 
       return res.status(200).json({
         success: true,
         action: 'created/updated',
-        user: data[0]
+        user: data[0] || { wallet_address: walletAddress }
       });
 
     } else {
