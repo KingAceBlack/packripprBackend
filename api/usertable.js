@@ -1,4 +1,4 @@
-// api/user.js - Using fetch instead of @supabase/supabase-js
+// api/usertable.js
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -7,8 +7,26 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
+  // Debug logging
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+  console.log('Environment vars present:', {
+    url: !!process.env.PACKRIPPR_SUPABASE_URL,
+    key: !!process.env.PACKRIPPR_SUPABASE_ANON_KEY
+  });
+
   try {
-    const { walletAddress, fid, username, avatar_url, total_points, tier, last_login, current_login_streak, longest_login_streak, notifications_enabled, frame_added } = req.body;
+    // Parse JSON body if it exists
+    let body = {};
+    if (req.body && typeof req.body === 'string') {
+      body = JSON.parse(req.body);
+    } else if (req.body && typeof req.body === 'object') {
+      body = req.body;
+    }
+    
+    console.log('Parsed body:', body);
+
+    const { walletAddress, fid, username, avatar_url, total_points, tier, last_login, current_login_streak, longest_login_streak, notifications_enabled, frame_added } = body;
 
     if (!walletAddress) {
       return res.status(400).json({ error: 'walletAddress is required' });
@@ -18,10 +36,13 @@ export default async function handler(req, res) {
     const SUPABASE_ANON_KEY = process.env.PACKRIPPR_SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.log('Missing env vars:', { SUPABASE_URL: !!SUPABASE_URL, SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY });
       return res.status(500).json({ error: 'Supabase configuration missing' });
     }
 
     if (req.method === 'POST') {
+      console.log('Creating user with wallet:', walletAddress);
+      
       // CREATE or UPDATE user (upsert)
       const response = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
         method: 'POST',
@@ -47,93 +68,20 @@ export default async function handler(req, res) {
         })
       });
 
+      console.log('Supabase response status:', response.status);
+      
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase error: ${error}`);
+        const errorText = await response.text();
+        console.log('Supabase error response:', errorText);
+        throw new Error(`Supabase error: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('Supabase success response:', data);
 
       return res.status(200).json({
         success: true,
         action: 'created/updated',
-        user: data[0]
-      });
-
-    } else if (req.method === 'PUT') {
-      // UPDATE specific fields
-      const updateData = {};
-      
-      if (fid !== undefined) updateData.fid = fid;
-      if (username !== undefined) updateData.username = username;
-      if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
-      if (total_points !== undefined) updateData.total_points = total_points;
-      if (tier !== undefined) updateData.tier = tier;
-      if (last_login !== undefined) updateData.last_login = last_login;
-      if (current_login_streak !== undefined) updateData.current_login_streak = current_login_streak;
-      if (longest_login_streak !== undefined) updateData.longest_login_streak = longest_login_streak;
-      if (notifications_enabled !== undefined) updateData.notifications_enabled = notifications_enabled;
-      if (frame_added !== undefined) updateData.frame_added = frame_added;
-      
-      updateData.updated_at = new Date().toISOString();
-
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/users?wallet_address=eq.${encodeURIComponent(walletAddress)}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Prefer': 'return=representation'
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase error: ${error}`);
-      }
-
-      const data = await response.json();
-
-      if (data.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      return res.status(200).json({
-        success: true,
-        action: 'updated',
-        user: data[0]
-      });
-
-    } else if (req.method === 'GET') {
-      // GET user by wallet address
-      const { walletAddress } = req.query;
-
-      if (!walletAddress) {
-        return res.status(400).json({ error: 'walletAddress query parameter is required' });
-      }
-
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/users?wallet_address=eq.${encodeURIComponent(walletAddress)}&select=*`, {
-        method: 'GET',
-        headers: {
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-        }
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Supabase error: ${error}`);
-      }
-
-      const data = await response.json();
-
-      if (data.length === 0) {
-        return res.status(404).json({ error: 'User not found' });
-      }
-
-      return res.status(200).json({
-        success: true,
         user: data[0]
       });
 
