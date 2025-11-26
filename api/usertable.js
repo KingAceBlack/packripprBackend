@@ -98,29 +98,88 @@ export default async function handler(req, res) {
 
       console.log('Creating/updating user with wallet:', walletAddress);
       
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Prefer': 'resolution=merge-duplicates,return=representation'
-        },
-        body: JSON.stringify({
-          wallet_address: walletAddress,
-          fid: fid || null,
-          username: username || null,
-          avatar_url: avatar_url || null,
-          total_points: total_points || 0,
-          tier: tier || 'Rookie',
-          last_login: last_login || new Date().toISOString().split('T')[0],
-          current_login_streak: current_login_streak || 1,
-          longest_login_streak: longest_login_streak || 1,
-          notifications_enabled: notifications_enabled !== undefined ? notifications_enabled : true,
-          frame_added: frame_added || false,
+      // First, check if user exists
+      const checkResponse = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?wallet_address=eq.${walletAddress}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          }
+        }
+      );
+
+      const existingUsers = await checkResponse.json();
+      const userExists = existingUsers.length > 0;
+
+      let response;
+      let action;
+
+      if (userExists) {
+        // UPDATE existing user
+        console.log('User exists, updating...');
+        
+        const updateData = {
           updated_at: new Date().toISOString()
-        })
-      });
+        };
+        
+        // Only update fields that are provided
+        if (fid !== undefined) updateData.fid = fid;
+        if (username !== undefined) updateData.username = username;
+        if (avatar_url !== undefined) updateData.avatar_url = avatar_url;
+        if (total_points !== undefined) updateData.total_points = total_points;
+        if (tier !== undefined) updateData.tier = tier;
+        if (last_login !== undefined) updateData.last_login = last_login;
+        if (current_login_streak !== undefined) updateData.current_login_streak = current_login_streak;
+        if (longest_login_streak !== undefined) updateData.longest_login_streak = longest_login_streak;
+        if (notifications_enabled !== undefined) updateData.notifications_enabled = notifications_enabled;
+        if (frame_added !== undefined) updateData.frame_added = frame_added;
+
+        response = await fetch(
+          `${SUPABASE_URL}/rest/v1/users?wallet_address=eq.${walletAddress}`,
+          {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(updateData)
+          }
+        );
+        action = 'updated';
+      } else {
+        // CREATE new user
+        console.log('User does not exist, creating...');
+        
+        response = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({
+            wallet_address: walletAddress,
+            fid: fid || null,
+            username: username || null,
+            avatar_url: avatar_url || null,
+            total_points: total_points || 0,
+            tier: tier || 'Rookie',
+            last_login: last_login || new Date().toISOString().split('T')[0],
+            current_login_streak: current_login_streak || 1,
+            longest_login_streak: longest_login_streak || 1,
+            notifications_enabled: notifications_enabled !== undefined ? notifications_enabled : true,
+            frame_added: frame_added || false,
+            updated_at: new Date().toISOString()
+          })
+        });
+        action = 'created';
+      }
 
       console.log('Supabase response status:', response.status);
       
@@ -144,7 +203,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         success: true,
-        action: 'created/updated',
+        action: action,
         user: data[0] || { wallet_address: walletAddress }
       });
     }
