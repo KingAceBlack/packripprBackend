@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, PUT, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+  
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   // Debug logging
@@ -15,42 +15,96 @@ export default async function handler(req, res) {
     key: !!process.env.PACKRIPPR_SUPABASE_ANON_KEY
   });
 
+  const SUPABASE_URL = process.env.PACKRIPPR_SUPABASE_URL;
+  const SUPABASE_ANON_KEY = process.env.PACKRIPPR_SUPABASE_ANON_KEY;
+
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    console.log('Missing env vars:', { SUPABASE_URL: !!SUPABASE_URL, SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY });
+    return res.status(500).json({ error: 'Supabase configuration missing' });
+  }
+
   try {
-    // Parse JSON body if it exists
-    let body = {};
-    if (req.body && typeof req.body === 'string') {
-      body = JSON.parse(req.body);
-    } else if (req.body && typeof req.body === 'object') {
-      body = req.body;
+    // ============ GET METHOD - Retrieve user by wallet address ============
+    if (req.method === 'GET') {
+      // Get wallet address from query parameter
+      const { walletAddress } = req.query;
+
+      if (!walletAddress) {
+        return res.status(400).json({ error: 'walletAddress query parameter is required' });
+      }
+
+      console.log('Fetching user with wallet:', walletAddress);
+
+      const response = await fetch(
+        `${SUPABASE_URL}/rest/v1/users?wallet_address=eq.${walletAddress}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          }
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log('Supabase error response:', errorText);
+        throw new Error(`Supabase error: ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Supabase response:', data);
+
+      if (data.length === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      return res.status(200).json({
+        success: true,
+        user: data[0]
+      });
     }
-    
-    console.log('Parsed body:', body);
 
-    const { walletAddress, fid, username, avatar_url, total_points, tier, last_login, current_login_streak, longest_login_streak, notifications_enabled, frame_added } = body;
-
-    if (!walletAddress) {
-      return res.status(400).json({ error: 'walletAddress is required' });
-    }
-
-    const SUPABASE_URL = process.env.PACKRIPPR_SUPABASE_URL;
-    const SUPABASE_ANON_KEY = process.env.PACKRIPPR_SUPABASE_ANON_KEY;
-
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.log('Missing env vars:', { SUPABASE_URL: !!SUPABASE_URL, SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY });
-      return res.status(500).json({ error: 'Supabase configuration missing' });
-    }
-
+    // ============ POST METHOD - Create/Update user ============
     if (req.method === 'POST') {
-      console.log('Creating user with wallet:', walletAddress);
+      // Parse JSON body
+      let body = {};
+      if (req.body && typeof req.body === 'string') {
+        body = JSON.parse(req.body);
+      } else if (req.body && typeof req.body === 'object') {
+        body = req.body;
+      }
       
-      // CREATE or UPDATE user (upsert)
+      console.log('Parsed body:', body);
+
+      const { 
+        walletAddress, 
+        fid, 
+        username, 
+        avatar_url, 
+        total_points, 
+        tier, 
+        last_login, 
+        current_login_streak, 
+        longest_login_streak, 
+        notifications_enabled, 
+        frame_added 
+      } = body;
+
+      if (!walletAddress) {
+        return res.status(400).json({ error: 'walletAddress is required' });
+      }
+
+      console.log('Creating/updating user with wallet:', walletAddress);
+      
       const response = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-          'Prefer': 'resolution=merge-duplicates,return=representation'  // ← KEY FIX: Request data back
+          'Prefer': 'resolution=merge-duplicates,return=representation'
         },
         body: JSON.stringify({
           wallet_address: walletAddress,
@@ -76,10 +130,7 @@ export default async function handler(req, res) {
         throw new Error(`Supabase error: ${errorText}`);
       }
 
-      // ← KEY FIX: Handle empty responses
       const responseText = await response.text();
-      console.log('Supabase raw response:', responseText);
-      
       let data = [];
       if (responseText) {
         try {
@@ -89,17 +140,17 @@ export default async function handler(req, res) {
         }
       }
 
-      console.log('Supabase parsed data:', data);
+      console.log('Supabase success response:', data);
 
       return res.status(200).json({
         success: true,
         action: 'created/updated',
         user: data[0] || { wallet_address: walletAddress }
       });
-
-    } else {
-      return res.status(405).json({ error: 'Method not allowed' });
     }
+
+    // Method not allowed
+    return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (err) {
     console.error('User API Error:', err);
