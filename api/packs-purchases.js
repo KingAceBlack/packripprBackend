@@ -1,4 +1,4 @@
-// api/packs.js - Now handles both packs and purchases
+// api/packs-purchases.js - Standardized with explicit table parameter
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,10 +10,6 @@ export default async function handler(req, res) {
   // Debug logging
   console.log('Method:', req.method);
   console.log('Query:', req.query);
-  console.log('Environment vars present:', {
-    url: !!process.env.PACKRIPPR_SUPABASE_URL,
-    key: !!process.env.PACKRIPPR_SUPABASE_ANON_KEY
-  });
 
   try {
     // Parse JSON body if it exists
@@ -32,19 +28,31 @@ export default async function handler(req, res) {
       // Purchase fields
       user_id, pack_id, tx_hash, status,
       // Common
-      id, table 
+      id 
     } = body;
 
     const SUPABASE_URL = process.env.PACKRIPPR_SUPABASE_URL;
     const SUPABASE_ANON_KEY = process.env.PACKRIPPR_SUPABASE_ANON_KEY;
 
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-      console.log('Missing env vars:', { SUPABASE_URL: !!SUPABASE_URL, SUPABASE_ANON_KEY: !!SUPABASE_ANON_KEY });
       return res.status(500).json({ error: 'Supabase configuration missing' });
     }
 
-    // Determine which table to operate on
-    const targetTable = req.query.table || table || 'packs';
+    // REQUIRED: Table must be specified in query parameter
+    const targetTable = req.query.table;
+    if (!targetTable) {
+      return res.status(400).json({ 
+        error: 'Table parameter is required',
+        details: 'Specify ?table=packs or ?table=purchases in the URL'
+      });
+    }
+
+    if (!['packs', 'purchases'].includes(targetTable)) {
+      return res.status(400).json({ 
+        error: 'Invalid table specified',
+        details: 'Table must be either "packs" or "purchases"'
+      });
+    }
 
     if (req.method === 'POST') {
       console.log(`Creating ${targetTable} with data:`, body);
@@ -52,8 +60,11 @@ export default async function handler(req, res) {
       let createData = {};
       
       if (targetTable === 'packs') {
+        if (!name) {
+          return res.status(400).json({ error: 'name is required for packs' });
+        }
         createData = {
-          name: name || null,
+          name: name,
           description: description || null,
           price_usdc: price_usdc || 50.000000,
           image_url: image_url || null,
@@ -91,7 +102,6 @@ export default async function handler(req, res) {
       }
 
       const data = await response.json();
-      console.log('Supabase success response:', data);
 
       return res.status(200).json({
         success: true,
@@ -101,9 +111,8 @@ export default async function handler(req, res) {
       });
 
     } else if (req.method === 'GET') {
-      // GET data from either table
-      const { id, is_active, user_id, pack_id, status, table } = req.query;
-      const targetTable = table || 'packs';
+      // GET data from specified table
+      const { id, is_active, user_id, pack_id, status } = req.query;
       
       let url = `${SUPABASE_URL}/rest/v1/${targetTable}?select=*`;
       
@@ -145,11 +154,9 @@ export default async function handler(req, res) {
       });
 
     } else if (req.method === 'PUT') {
-      // UPDATE data in either table
-      const targetTable = req.query.table || table || 'packs';
-
+      // UPDATE data in specified table
       if (!id) {
-        return res.status(400).json({ error: 'ID is required for update' });
+        return res.status(400).json({ error: 'id is required for update' });
       }
 
       const updateData = {};
@@ -199,11 +206,9 @@ export default async function handler(req, res) {
       });
 
     } else if (req.method === 'DELETE') {
-      // DELETE from either table
-      const targetTable = req.query.table || table || 'packs';
-
+      // DELETE from specified table
       if (!id) {
-        return res.status(400).json({ error: 'ID is required for deletion' });
+        return res.status(400).json({ error: 'id is required for deletion' });
       }
 
       console.log(`Deleting from ${targetTable}:`, id);
