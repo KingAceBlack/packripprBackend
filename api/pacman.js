@@ -1,4 +1,4 @@
-// api/pacman.js - Now includes buybacks table
+// api/pacman.js - Now includes redemptions table
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -30,7 +30,9 @@ export default async function handler(req, res) {
       // NFT fields
       token_id, inventory_item_id, user_id, rarity, metadata_url,
       // Buyback fields
-      nft_id, payout_usdc, tx_hash
+      nft_id, payout_usdc, tx_hash,
+      // Redemption fields
+      shipping_address, vault_fee_usd, shipping_fee_usd
     } = body;
 
     const SUPABASE_URL = process.env.PACKRIPPR_SUPABASE_URL;
@@ -43,10 +45,10 @@ export default async function handler(req, res) {
     // Determine which table to operate on
     const targetTable = req.query.table || 'inventory_items';
 
-    if (!['inventory_items', 'nfts', 'buybacks'].includes(targetTable)) {
+    if (!['inventory_items', 'nfts', 'buybacks', 'redemptions'].includes(targetTable)) {
       return res.status(400).json({ 
         error: 'Invalid table specified',
-        details: 'Table must be either "inventory_items", "nfts", or "buybacks"'
+        details: 'Table must be either "inventory_items", "nfts", "buybacks", or "redemptions"'
       });
     }
 
@@ -114,6 +116,23 @@ export default async function handler(req, res) {
           tx_hash: tx_hash || null,
           status: 'initiated'
         };
+      } else if (targetTable === 'redemptions') {
+        // Validate required fields for redemptions
+        if (!nft_id || !user_id || !shipping_address) {
+          return res.status(400).json({ 
+            error: 'Required fields missing',
+            details: 'nft_id, user_id, and shipping_address are required for redemptions'
+          });
+        }
+
+        createData = {
+          nft_id: nft_id,
+          user_id: user_id,
+          shipping_address: shipping_address,
+          status: 'requested',
+          vault_fee_usd: vault_fee_usd || 50.000000,
+          shipping_fee_usd: shipping_fee_usd || 25.000000
+        };
       }
 
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}`, {
@@ -168,6 +187,11 @@ export default async function handler(req, res) {
         if (inventory_item_id) url += `&inventory_item_id=eq.${inventory_item_id}`;
         url += '&order=created_at.desc';
       } else if (targetTable === 'buybacks') {
+        if (user_id) url += `&user_id=eq.${user_id}`;
+        if (nft_id) url += `&nft_id=eq.${nft_id}`;
+        if (status) url += `&status=eq.${status}`;
+        url += '&order=created_at.desc';
+      } else if (targetTable === 'redemptions') {
         if (user_id) url += `&user_id=eq.${user_id}`;
         if (nft_id) url += `&nft_id=eq.${nft_id}`;
         if (status) url += `&status=eq.${status}`;
@@ -235,6 +259,14 @@ export default async function handler(req, res) {
         if (payout_usdc !== undefined) updateData.payout_usdc = payout_usdc;
         if (tx_hash !== undefined) updateData.tx_hash = tx_hash;
         if (status !== undefined) updateData.status = status;
+      } else if (targetTable === 'redemptions') {
+        // Only include provided fields for redemptions
+        if (nft_id !== undefined) updateData.nft_id = nft_id;
+        if (user_id !== undefined) updateData.user_id = user_id;
+        if (shipping_address !== undefined) updateData.shipping_address = shipping_address;
+        if (status !== undefined) updateData.status = status;
+        if (vault_fee_usd !== undefined) updateData.vault_fee_usd = vault_fee_usd;
+        if (shipping_fee_usd !== undefined) updateData.shipping_fee_usd = shipping_fee_usd;
       }
 
       console.log(`Updating ${targetTable}:`, id, 'with data:', updateData);
