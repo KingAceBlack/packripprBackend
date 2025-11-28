@@ -1,4 +1,4 @@
-// api/pacman.js - Fixed version
+// api/pacman.js - Now includes buybacks table
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -28,7 +28,9 @@ export default async function handler(req, res) {
       fair_value_usd, acquisition_cost_usd, storage_location, 
       vault_ref, status,
       // NFT fields
-      token_id, inventory_item_id, user_id, rarity, metadata_url
+      token_id, inventory_item_id, user_id, rarity, metadata_url,
+      // Buyback fields
+      nft_id, payout_usdc, tx_hash
     } = body;
 
     const SUPABASE_URL = process.env.PACKRIPPR_SUPABASE_URL;
@@ -41,10 +43,10 @@ export default async function handler(req, res) {
     // Determine which table to operate on
     const targetTable = req.query.table || 'inventory_items';
 
-    if (!['inventory_items', 'nfts'].includes(targetTable)) {
+    if (!['inventory_items', 'nfts', 'buybacks'].includes(targetTable)) {
       return res.status(400).json({ 
         error: 'Invalid table specified',
-        details: 'Table must be either "inventory_items" or "nfts"'
+        details: 'Table must be either "inventory_items", "nfts", or "buybacks"'
       });
     }
 
@@ -92,6 +94,26 @@ export default async function handler(req, res) {
           metadata_url: metadata_url || null,
           image_url: image_url || null
         };
+      } else if (targetTable === 'buybacks') {
+        // Validate required fields for buybacks
+        if (!nft_id || !user_id || !fair_value_usd) {
+          return res.status(400).json({ 
+            error: 'Required fields missing',
+            details: 'nft_id, user_id, and fair_value_usd are required for buybacks'
+          });
+        }
+
+        // Calculate 85% payout automatically if not provided
+        const calculatedPayout = payout_usdc || (fair_value_usd * 0.85);
+        
+        createData = {
+          nft_id: nft_id,
+          user_id: user_id,
+          fair_value_usd: fair_value_usd,
+          payout_usdc: calculatedPayout,
+          tx_hash: tx_hash || null,
+          status: 'initiated'
+        };
       }
 
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}`, {
@@ -124,7 +146,7 @@ export default async function handler(req, res) {
 
     } else if (req.method === 'GET') {
       // GET data from specified table
-      const { id, sku, grader, grade, status, cert, vault_ref, token_id, user_id, rarity } = req.query;
+      const { id, sku, grader, grade, status, cert, vault_ref, token_id, user_id, rarity, nft_id } = req.query;
       
       let url = `${SUPABASE_URL}/rest/v1/${targetTable}?select=*`;
       
@@ -144,6 +166,11 @@ export default async function handler(req, res) {
         if (user_id) url += `&user_id=eq.${user_id}`;
         if (rarity) url += `&rarity=eq.${rarity}`;
         if (inventory_item_id) url += `&inventory_item_id=eq.${inventory_item_id}`;
+        url += '&order=created_at.desc';
+      } else if (targetTable === 'buybacks') {
+        if (user_id) url += `&user_id=eq.${user_id}`;
+        if (nft_id) url += `&nft_id=eq.${nft_id}`;
+        if (status) url += `&status=eq.${status}`;
         url += '&order=created_at.desc';
       }
 
@@ -200,6 +227,14 @@ export default async function handler(req, res) {
         if (rarity !== undefined) updateData.rarity = rarity;
         if (metadata_url !== undefined) updateData.metadata_url = metadata_url;
         if (image_url !== undefined) updateData.image_url = image_url;
+      } else if (targetTable === 'buybacks') {
+        // Only include provided fields for buybacks
+        if (nft_id !== undefined) updateData.nft_id = nft_id;
+        if (user_id !== undefined) updateData.user_id = user_id;
+        if (fair_value_usd !== undefined) updateData.fair_value_usd = fair_value_usd;
+        if (payout_usdc !== undefined) updateData.payout_usdc = payout_usdc;
+        if (tx_hash !== undefined) updateData.tx_hash = tx_hash;
+        if (status !== undefined) updateData.status = status;
       }
 
       console.log(`Updating ${targetTable}:`, id, 'with data:', updateData);
