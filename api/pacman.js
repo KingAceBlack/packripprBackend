@@ -1,4 +1,4 @@
-// api/pacman.js - Now handles both inventory_items and nfts
+// api/pacman.js - Fixed version
 export default async function handler(req, res) {
   // --- CORS HEADERS ---
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -207,7 +207,7 @@ export default async function handler(req, res) {
       const response = await fetch(`${SUPABASE_URL}/rest/v1/${targetTable}?id=eq.${id}`, {
         method: 'PATCH',
         headers: {
-          'Content-Type: 'application/json',
+          'Content-Type': 'application/json',
           'apikey': SUPABASE_ANON_KEY,
           'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
           'Prefer': 'return=representation'
