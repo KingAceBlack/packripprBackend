@@ -26,8 +26,8 @@ export default async function handler(req, res) {
     const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
     if (!ALCHEMY_KEY) return res.status(500).json({ error: 'Alchemy key not configured' });
 
-    const CONTRACT_ADDRESS = '0x851c4152161904F7ad05cf49d64dd1F39fd8E35d';
-    const NFT_CONTRACT = '0x5Bc8904CE5cC7db7ac731DE368a829EAC4A803f7';
+    const CONTRACT_ADDRESS = '0xA3D7FB8BA2cD9605D0599BD23F1486725A5f7a68';
+    const NFT_CONTRACT = '0xEed0161329830F14d85D28c9803eeF4a02016c14';
 
     // Use Alchemy's getNFTs endpoint to get NFTs owned by the contract
     const alchemyUrl = `https://arb-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}/getNFTs?owner=${CONTRACT_ADDRESS}&contractAddresses[]=${NFT_CONTRACT}&withMetadata=true`;
