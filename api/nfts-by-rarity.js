@@ -1,4 +1,4 @@
-// api/nfts-by-rarity.js
+// api/nfts-cert-tokenid.js
 import { createPublicClient, http } from 'viem';
 import { arbitrumSepolia } from 'viem/chains';
 import { abi } from '../abi.js';
@@ -8,21 +8,11 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
+  
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Only GET requests allowed' });
 
   try {
-    // Get rarity from query parameter
-    const { rarity } = req.query;
-    
-    if (!rarity) {
-      return res.status(400).json({ 
-        error: 'Rarity parameter is required',
-        usage: 'Call with ?rarity=common (or rare, epic, legendary, etc.)'
-      });
-    }
-
     const ALCHEMY_KEY = process.env.ALCHEMY_KEY;
     if (!ALCHEMY_KEY) return res.status(500).json({ error: 'Alchemy key not configured' });
 
@@ -39,60 +29,51 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    // Process all NFTs and extract rarity
-    const allNFTs = data.ownedNfts.map(nft => {
+    // Process all NFTs and extract Cert value and tokenId
+    const nftsWithCert = data.ownedNfts.map(nft => {
       const tokenId = BigInt(nft.id.tokenId).toString();
       
-      // Extract rarity from attributes
-      let nftRarity = "unknown";
+      // Extract Cert from attributes
+      let certValue = null;
       if (nft.metadata?.attributes) {
-        const rarityAttr = nft.metadata.attributes.find(attr => 
-          attr.trait_type && attr.trait_type.toLowerCase() === 'rarity'
+        const certAttr = nft.metadata.attributes.find(attr => 
+          attr.trait_type && attr.trait_type.toLowerCase() === 'cert'
         );
-        if (rarityAttr) {
-          nftRarity = rarityAttr.value;
+        if (certAttr) {
+          certValue = certAttr.value;
         }
       }
 
       return {
         tokenId,
+        cert: certValue,
         name: nft.title,
         image: nft.media[0]?.gateway || nft.metadata?.image,
-        rarity: nftRarity,
-        attributes: nft.metadata?.attributes || []
+        allAttributes: nft.metadata?.attributes || []
       };
     });
 
-    // Filter NFTs by the specified rarity (case-insensitive)
-    const targetRarity = rarity.toLowerCase();
-    const filteredNFTs = allNFTs.filter(nft => 
-      nft.rarity.toLowerCase() === targetRarity
-    );
+    // Separate NFTs with and without Cert values
+    const nftsWithCertValue = nftsWithCert.filter(nft => nft.cert !== null);
+    const nftsWithoutCert = nftsWithCert.filter(nft => nft.cert === null);
 
-    // Extract just the token IDs
-    const tokenIds = filteredNFTs.map(nft => nft.tokenId);
-
-    // Count all rarities for reference
-    const rarityCounts = {};
-    allNFTs.forEach(nft => {
-      const r = nft.rarity;
-      rarityCounts[r] = (rarityCounts[r] || 0) + 1;
-    });
-
-    console.log(`Filtered ${filteredNFTs.length} NFTs with rarity "${rarity}" out of ${allNFTs.length} total`);
+    console.log(`Found ${nftsWithCertValue.length} NFTs with Cert values out of ${nftsWithCert.length} total`);
 
     res.status(200).json({
       success: true,
-      requestedRarity: rarity,
-      nfts: filteredNFTs,
-      tokenIds: tokenIds,
-      count: filteredNFTs.length,
-      totalNFTs: allNFTs.length,
-      availableRarities: rarityCounts
+      totalNFTs: nftsWithCert.length,
+      nftsWithCert: nftsWithCertValue.length,
+      nftsWithoutCert: nftsWithoutCert.length,
+      nfts: nftsWithCert,
+      // Quick lookup arrays
+      certValues: nftsWithCertValue.map(nft => ({
+        tokenId: nft.tokenId,
+        cert: nft.cert
+      }))
     });
 
   } catch (err) {
-    console.error('NFTs by Rarity API Error:', err);
+    console.error('NFTs Cert API Error:', err);
     res.status(500).json({
       error: 'Failed to fetch NFTs',
       details: err?.message ?? String(err)
