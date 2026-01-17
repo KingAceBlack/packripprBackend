@@ -98,10 +98,10 @@ export default async function handler(req, res) {
         };
       } else if (targetTable === 'buybacks') {
         // Validate required fields for buybacks
-        if (!nft_id || !user_id || !fair_value_usd) {
+        if (!nft_id || !user_id || !fair_value_usd || !token_id) {
           return res.status(400).json({ 
             error: 'Required fields missing',
-            details: 'nft_id, user_id, and fair_value_usd are required for buybacks'
+            details: 'nft_id, user_id, fair_value_usd, and token_id are required for buybacks'
           });
         }
 
@@ -111,6 +111,7 @@ export default async function handler(req, res) {
         createData = {
           nft_id: nft_id,
           user_id: user_id,
+          token_id: token_id,
           fair_value_usd: fair_value_usd,
           payout_usdc: calculatedPayout,
           tx_hash: tx_hash || null,
@@ -118,16 +119,17 @@ export default async function handler(req, res) {
         };
       } else if (targetTable === 'redemptions') {
         // Validate required fields for redemptions
-        if (!nft_id || !user_id || !shipping_address) {
+        if (!nft_id || !user_id || !shipping_address || !token_id) {
           return res.status(400).json({ 
             error: 'Required fields missing',
-            details: 'nft_id, user_id, and shipping_address are required for redemptions'
+            details: 'nft_id, user_id, shipping_address, and token_id are required for redemptions'
           });
         }
 
         createData = {
           nft_id: nft_id,
           user_id: user_id,
+          token_id: token_id,
           shipping_address: shipping_address,
           status: 'requested',
           vault_fee_usd: vault_fee_usd || 50.000000,
@@ -189,11 +191,13 @@ export default async function handler(req, res) {
       } else if (targetTable === 'buybacks') {
         if (user_id) url += `&user_id=eq.${user_id}`;
         if (nft_id) url += `&nft_id=eq.${nft_id}`;
+        if (token_id) url += `&token_id=eq.${token_id}`;
         if (status) url += `&status=eq.${status}`;
         url += '&order=created_at.desc';
       } else if (targetTable === 'redemptions') {
         if (user_id) url += `&user_id=eq.${user_id}`;
         if (nft_id) url += `&nft_id=eq.${nft_id}`;
+        if (token_id) url += `&token_id=eq.${token_id}`;
         if (status) url += `&status=eq.${status}`;
         url += '&order=created_at.desc';
       }
@@ -255,6 +259,7 @@ export default async function handler(req, res) {
         // Only include provided fields for buybacks
         if (nft_id !== undefined) updateData.nft_id = nft_id;
         if (user_id !== undefined) updateData.user_id = user_id;
+        if (token_id !== undefined) updateData.token_id = token_id;
         if (fair_value_usd !== undefined) updateData.fair_value_usd = fair_value_usd;
         if (payout_usdc !== undefined) updateData.payout_usdc = payout_usdc;
         if (tx_hash !== undefined) updateData.tx_hash = tx_hash;
@@ -263,6 +268,7 @@ export default async function handler(req, res) {
         // Only include provided fields for redemptions
         if (nft_id !== undefined) updateData.nft_id = nft_id;
         if (user_id !== undefined) updateData.user_id = user_id;
+        if (token_id !== undefined) updateData.token_id = token_id;
         if (shipping_address !== undefined) updateData.shipping_address = shipping_address;
         if (status !== undefined) updateData.status = status;
         if (vault_fee_usd !== undefined) updateData.vault_fee_usd = vault_fee_usd;
