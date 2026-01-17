@@ -26,7 +26,7 @@ export default async function handler(req, res) {
       // Pack fields
       name, description, price_usdc, image_url, is_active,
       // Purchase fields
-      user_id, pack_id, tx_hash, status,
+      user_id, pack_id, tx_hash, status, token_id,
       // Common
       id 
     } = body;
@@ -71,12 +71,13 @@ export default async function handler(req, res) {
           is_active: is_active !== undefined ? is_active : true
         };
       } else if (targetTable === 'purchases') {
-        if (!user_id || !pack_id) {
-          return res.status(400).json({ error: 'user_id and pack_id are required for purchases' });
+        if (!user_id || !pack_id || !token_id) {
+          return res.status(400).json({ error: 'user_id, pack_id, and token_id are required for purchases' });
         }
         createData = {
           user_id: user_id,
           pack_id: pack_id,
+          token_id: token_id,
           tx_hash: tx_hash || null,
           status: status || 'pending'
         };
@@ -112,7 +113,7 @@ export default async function handler(req, res) {
 
     } else if (req.method === 'GET') {
       // GET data from specified table
-      const { id, is_active, user_id, pack_id, status } = req.query;
+      const { id, is_active, user_id, pack_id, status, token_id } = req.query;
       
       let url = `${SUPABASE_URL}/rest/v1/${targetTable}?select=*`;
       
@@ -125,6 +126,7 @@ export default async function handler(req, res) {
       } else if (targetTable === 'purchases') {
         if (user_id) url += `&user_id=eq.${user_id}`;
         if (pack_id) url += `&pack_id=eq.${pack_id}`;
+        if (token_id) url += `&token_id=eq.${token_id}`;
         if (status) url += `&status=eq.${status}`;
         url += '&order=created_at.desc';
       }
@@ -170,6 +172,7 @@ export default async function handler(req, res) {
       } else if (targetTable === 'purchases') {
         if (user_id !== undefined) updateData.user_id = user_id;
         if (pack_id !== undefined) updateData.pack_id = pack_id;
+        if (token_id !== undefined) updateData.token_id = token_id;
         if (tx_hash !== undefined) updateData.tx_hash = tx_hash;
         if (status !== undefined) updateData.status = status;
       }
