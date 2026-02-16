@@ -15,14 +15,12 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Alchemy key not configured' });
     }
 
-    // Owner address to check
     const OWNER_ADDRESS = '0x712779cbdd3290437f84163fb3d9a06c338768ad';
-    
-    // Loot NFT contract on Ethereum mainnet
     const LOOT_CONTRACT = '0xff9c1b15b16263c61d017ee9f65c50e4ae0113d7';
+    const RPC_URL = `https://eth-mainnet.g.alchemy.com/v2/${ALCHEMY_KEY}`;
 
-    // Use Alchemy's getNFTsForOwner endpoint (Ethereum mainnet)
-    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?owner=${OWNER_ADDRESS}&contractAddresses[]=${LOOT_CONTRACT}&withMetadata=true`;
+    // Step 1: Get all token IDs owned by the address
+    const alchemyUrl = `https://eth-mainnet.g.alchemy.com/nft/v3/${ALCHEMY_KEY}/getNFTsForOwner?owner=${OWNER_ADDRESS}&contractAddresses[]=${LOOT_CONTRACT}&withMetadata=false`;
 
     const response = await fetch(alchemyUrl);
     
@@ -32,34 +30,88 @@ export default async function handler(req, res) {
     }
 
     const data = await response.json();
+    const tokenIds = (data.ownedNfts || []).map(nft => nft.tokenId);
 
-    const nfts = (data.ownedNfts || []).map(nft => {
-      // Handle token ID (v3 API uses tokenId directly)
-      const tokenId = nft.tokenId || BigInt(nft.id?.tokenId || '0').toString();
+    // Step 2: Fetch gear attributes for each token from the Loot contract
+    // Loot contract has these view functions: getWeapon, getChest, getHead, getWaist, getFoot, getHand, getNeck, getRing
+    const gearFunctions = [
+      { name: 'Weapon', selector: '0x169e5c20' },   // getWeapon(uint256)
+      { name: 'Chest', selector: '0x4c2a7c25' },    // getChest(uint256)
+      { name: 'Head', selector: '0xae756451' },     // getHead(uint256)
+      { name: 'Waist', selector: '0xd5cb2a59' },    // getWaist(uint256)
+      { name: 'Foot', selector: '0xa6df38a4' },     // getFoot(uint256)
+      { name: 'Hand', selector: '0xd8ae4e7d' },     // getHand(uint256)
+      { name: 'Neck', selector: '0x067ca633' },     // getNeck(uint256)
+      { name: 'Ring', selector: '0x867dafb7' }      // getRing(uint256)
+    ];
 
-      // Extract attributes from metadata
-      const attributes = nft.raw?.metadata?.attributes || nft.metadata?.attributes || [];
+    // Helper to encode token ID as uint256
+    const encodeTokenId = (tokenId) => {
+      return BigInt(tokenId).toString(16).padStart(64, '0');
+    };
 
-      // Loot NFTs have unique item-based attributes
-      // Extract all the gear pieces
-      const gear = {};
-      attributes.forEach(attr => {
-        if (attr.trait_type && attr.value) {
-          gear[attr.trait_type] = attr.value;
-        }
-      });
+    // Helper to decode string from ABI-encoded response
+    const decodeString = (hexData) => {
+      if (!hexData || hexData === '0x') return '';
+      // Remove 0x prefix
+      const data = hexData.slice(2);
+      // String offset is at position 0 (32 bytes)
+      // String length is at position 64 (32 bytes)
+      const lengthHex = data.slice(64, 128);
+      const length = parseInt(lengthHex, 16);
+      // String data starts at position 128
+      const stringHex = data.slice(128, 128 + length * 2);
+      // Convert hex to string
+      let str = '';
+      for (let i = 0; i < stringHex.length; i += 2) {
+        str += String.fromCharCode(parseInt(stringHex.slice(i, i + 2), 16));
+      }
+      return str;
+    };
 
-      return {
-        tokenId,
-        name: nft.name || nft.title || `Loot Bag #${tokenId}`,
-        description: nft.description || nft.raw?.metadata?.description || '',
-        image: nft.image?.cachedUrl || nft.image?.originalUrl || nft.raw?.metadata?.image || '',
-        attributes,
-        gear
-      };
-    });
+    // Fetch gear for all tokens
+    const nfts = await Promise.all(
+      tokenIds.map(async (tokenId) => {
+        const gear = {};
 
-    console.log(`Found ${nfts.length} Loot NFTs for address ${OWNER_ADDRESS}`);
+        // Batch all gear calls for this token
+        const gearPromises = gearFunctions.map(async ({ name, selector }) => {
+          const callData = selector + encodeTokenId(tokenId);
+          
+          const rpcResponse = await fetch(RPC_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'eth_call',
+              params: [
+                {
+                  to: LOOT_CONTRACT,
+                  data: callData
+                },
+                'latest'
+              ],
+              id: 1
+            })
+          });
+
+          const rpcData = await rpcResponse.json();
+          return { name, value: decodeString(rpcData.result) };
+        });
+
+        const gearResults = await Promise.all(gearPromises);
+        gearResults.forEach(({ name, value }) => {
+          gear[name] = value;
+        });
+
+        return {
+          tokenId,
+          gear
+        };
+      })
+    );
+
+    console.log(`Found ${nfts.length} Loot NFTs with gear for ${OWNER_ADDRESS}`);
 
     res.status(200).json({
       success: true,
